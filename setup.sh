@@ -26,11 +26,11 @@ if [ -x /opt/homebrew/bin/brew ]; then
 fi
 
 # --------------------------------------------------
-# 2. Install ZSH + git-extras
+# 2. Install ZSH + packages
 # --------------------------------------------------
 echo "[2/7] Installing packages..."
 
-brew install zsh git git-extras
+brew install zsh git git-extras fzf
 
 # --------------------------------------------------
 # 3. Install Oh My Zsh
@@ -61,6 +61,18 @@ if [ ! -d "$ZSH_CUSTOM/plugins/zsh-completions" ]; then
     git clone \
       https://github.com/zsh-users/zsh-completions \
       "$ZSH_CUSTOM/plugins/zsh-completions"
+fi
+
+if [ ! -d "$ZSH_CUSTOM/plugins/zsh-history-substring-search" ]; then
+    git clone \
+      https://github.com/zsh-users/zsh-history-substring-search \
+      "$ZSH_CUSTOM/plugins/zsh-history-substring-search"
+fi
+
+if [ ! -d "$ZSH_CUSTOM/plugins/fzf-tab" ]; then
+    git clone \
+      https://github.com/Aloxaf/fzf-tab \
+      "$ZSH_CUSTOM/plugins/fzf-tab"
 fi
 
 if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
