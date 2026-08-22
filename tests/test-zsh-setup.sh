@@ -168,6 +168,7 @@ prepare_installed_omz_fixture() {
     local plugin
 
     mkdir -p "$fixture_home/.oh-my-zsh/custom/plugins"
+    touch "$fixture_home/.oh-my-zsh/oh-my-zsh.sh"
     for plugin in \
         zsh-completions \
         fzf-tab \
@@ -176,6 +177,7 @@ prepare_installed_omz_fixture() {
         zsh-syntax-highlighting
     do
         mkdir -p "$fixture_home/.oh-my-zsh/custom/plugins/$plugin"
+        touch "$fixture_home/.oh-my-zsh/custom/plugins/$plugin/$plugin.plugin.zsh"
     done
 }
 
@@ -229,7 +231,7 @@ test_setup_preserves_original_backups_on_rerun() {
     printf '%s\n' 'original zsh configuration' > "$fixture_home/.zshrc"
     printf '%s\n' 'original global ignore' > "$fixture_home/.gitignore_global"
 
-    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh"
+    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
     status=$?
     if [ "$status" -eq 0 ]; then
         pass "setup completes in an isolated existing-config fixture"
@@ -293,11 +295,105 @@ test_setup_creates_empty_backup_sentinels() {
     rm -rf "$fixture_root"
 }
 
+test_setup_rejects_partial_plugin_install() {
+    local fixture_root
+    local fixture_home
+    local fixture_project
+    local plugin
+    local status
+
+    if ! all_formulae_installed; then
+        return
+    fi
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    fixture_project="$fixture_root/project"
+    mkdir -p "$fixture_home/.oh-my-zsh/custom/plugins"
+    touch "$fixture_home/.oh-my-zsh/oh-my-zsh.sh"
+    setup_fixture_project "$fixture_project"
+
+    for plugin in \
+        zsh-completions \
+        fzf-tab \
+        zsh-autosuggestions \
+        zsh-history-substring-search \
+        zsh-syntax-highlighting
+    do
+        mkdir -p "$fixture_home/.oh-my-zsh/custom/plugins/$plugin"
+    done
+
+    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
+    status=$?
+
+    if [ "$status" -ne 0 ]; then
+        pass "setup rejects an incomplete plugin directory"
+    else
+        fail "setup rejects an incomplete plugin directory"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
+test_recheck_rejects_broken_fresh_login_startup() {
+    local fixture_root
+    local fixture_home
+    local output
+    local status
+    local good_path
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    mkdir -p "$fixture_home"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    printf '%s\n' '# Intentionally empty: startup must establish Homebrew PATH itself.' \
+      > "$fixture_home/.zshrc"
+    mkdir -p "$fixture_home/alternate-zdotdir"
+    cp "$PROJECT_DIR/zsh.txt" "$fixture_home/alternate-zdotdir/.zshrc"
+    touch "$fixture_home/.zshrc.backup"
+    touch "$fixture_home/.gitignore_global"
+    touch "$fixture_home/.gitignore_global.backup"
+    touch "$fixture_home/.gittag.sh" "$fixture_home/.IntelliJOpen.sh"
+    chmod 755 "$fixture_home/.gittag.sh" "$fixture_home/.IntelliJOpen.sh"
+
+    HOME="$fixture_home" "$BREW_PREFIX/bin/git" config --global \
+      core.excludesfile "$fixture_home/.gitignore_global"
+    HOME="$fixture_home" "$BREW_PREFIX/bin/git" config --global \
+      push.autoSetupRemote true
+
+    good_path="$BREW_PREFIX/bin:$BREW_PREFIX/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    output="$(
+        HOME="$fixture_home" \
+        ZDOTDIR="$fixture_home/alternate-zdotdir" \
+        PATH="$good_path" \
+        EXPECTED_LOGIN_SHELL="$BREW_PREFIX/bin/zsh" \
+        /bin/bash -c '
+            dscl() {
+                printf "UserShell: %s\n" "$EXPECTED_LOGIN_SHELL"
+            }
+            source "$0"
+        ' "$PROJECT_DIR/recheck-setup.sh" 2>&1
+    )"
+    status=$?
+
+    if [ "$status" -ne 0 ] \
+       && printf '%s\n' "$output" | grep -Fq 'Fresh login shell startup'; then
+        pass "recheck rejects a broken fresh login startup"
+    else
+        fail "recheck rejects a broken fresh login startup"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
 detect_brew
 test_zsh_template_prioritizes_homebrew
 test_recheck_fails_for_system_first_path
 test_setup_preserves_original_backups_on_rerun
 test_setup_creates_empty_backup_sentinels
+test_setup_rejects_partial_plugin_install
+test_recheck_rejects_broken_fresh_login_startup
 
 printf '\nTests: %s, Failures: %s\n' "$TESTS" "$FAILURES"
 

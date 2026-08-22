@@ -132,13 +132,24 @@ printf '%s\n' '[5/9] Checking Oh My Zsh...'
 OMZ_DIR="$HOME/.oh-my-zsh"
 ZSH_CUSTOM="$OMZ_DIR/custom"
 
-if [ ! -d "$OMZ_DIR" ]; then
+if [ ! -e "$OMZ_DIR" ]; then
     printf '%s\n' 'Installing Oh My Zsh...'
     RUNZSH=no CHSH=no KEEP_ZSHRC=yes ZSH="$OMZ_DIR" sh -c \
       "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
       '' --unattended --keep-zshrc
+elif [ ! -f "$OMZ_DIR/oh-my-zsh.sh" ]; then
+    printf 'ERROR: Incomplete Oh My Zsh installation: %s\n' \
+      "$OMZ_DIR" >&2
+    printf '%s\n' 'Remove or repair that directory, then run setup again.' >&2
+    exit 1
 else
     printf '%s\n' 'Oh My Zsh already installed'
+fi
+
+if [ ! -f "$OMZ_DIR/oh-my-zsh.sh" ]; then
+    printf 'ERROR: Oh My Zsh entrypoint not found: %s\n' \
+      "$OMZ_DIR/oh-my-zsh.sh" >&2
+    exit 1
 fi
 
 mkdir -p "$ZSH_CUSTOM/plugins"
@@ -153,11 +164,18 @@ printf '%s\n' '[6/9] Installing ZSH plugins...'
 install_plugin() {
     local name="$1"
     local repo="$2"
+    local entrypoint="$3"
     local target="$ZSH_CUSTOM/plugins/$name"
 
     if [ -d "$target" ]; then
-        printf '%s already installed\n' "$name"
-        return
+        if [ -f "$target/$entrypoint" ]; then
+            printf '%s already installed\n' "$name"
+            return
+        fi
+
+        printf 'ERROR: Incomplete plugin installation: %s\n' "$target" >&2
+        printf '%s\n' 'Remove or repair that directory, then run setup again.' >&2
+        exit 1
     fi
 
     if [ -e "$target" ]; then
@@ -168,18 +186,29 @@ install_plugin() {
 
     printf 'Installing %s...\n' "$name"
     "$GIT_BIN" clone --depth=1 "$repo" "$target"
+
+    if [ ! -f "$target/$entrypoint" ]; then
+        printf 'ERROR: Plugin entrypoint not found after clone: %s\n' \
+          "$target/$entrypoint" >&2
+        exit 1
+    fi
 }
 
 install_plugin zsh-completions \
-  https://github.com/zsh-users/zsh-completions
+  https://github.com/zsh-users/zsh-completions \
+  zsh-completions.plugin.zsh
 install_plugin fzf-tab \
-  https://github.com/Aloxaf/fzf-tab
+  https://github.com/Aloxaf/fzf-tab \
+  fzf-tab.plugin.zsh
 install_plugin zsh-autosuggestions \
-  https://github.com/zsh-users/zsh-autosuggestions
+  https://github.com/zsh-users/zsh-autosuggestions \
+  zsh-autosuggestions.plugin.zsh
 install_plugin zsh-history-substring-search \
-  https://github.com/zsh-users/zsh-history-substring-search
+  https://github.com/zsh-users/zsh-history-substring-search \
+  zsh-history-substring-search.plugin.zsh
 install_plugin zsh-syntax-highlighting \
-  https://github.com/zsh-users/zsh-syntax-highlighting
+  https://github.com/zsh-users/zsh-syntax-highlighting \
+  zsh-syntax-highlighting.plugin.zsh
 
 
 # ==================================================
