@@ -1,5 +1,5 @@
 alias git-prune-local='git fetch -p && current_branch=$(git branch --show-current) && for branch in $(git branch -vv | grep ": gone]" | awk "{print \$1}"); do [ "$branch" != "$current_branch" ] && git branch -d "$branch"; done'
-alias idea=/Users/pigke/Documents/IntelliJOpen.sh
+
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
@@ -139,8 +139,6 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-export AWS_PROFILE=miniapp-aws
-export AWS_PROFILE=dgl
-export AWS_PROFILE=dgl
-export AWS_PROFILE=dgl
+
 alias gittag="$HOME/.gittag.sh"
+alias idea="$HOME/.IntelliJOpen.sh"
