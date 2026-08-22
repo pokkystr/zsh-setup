@@ -91,7 +91,7 @@ ENABLE_CORRECTION="true"
 # Timestamp format shown by the history command
 #
 # HIST_STAMPS="mm/dd/yyyy"
-# HIST_STAMPS="dd.mm.yyyy"
+HIST_STAMPS="dd.mm.yyyy"
 # HIST_STAMPS="yyyy-mm-dd"
 
 
