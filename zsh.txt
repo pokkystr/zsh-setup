@@ -98,6 +98,8 @@ python
 pyenv
 brew
 pod
+kubectl
+vscode
 docker-compose 
 docker
 git
@@ -105,9 +107,12 @@ git-auto-fetch
 gitignore
 gradle
 golang
+node
 heroku
 ssh-agent
-supervisor)
+supervisor
+aws
+gcloud)
 
 source $ZSH/oh-my-zsh.sh
 
