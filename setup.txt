@@ -1,0 +1,52 @@
+ohmyzsh zsh
+Oh my 
+
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+brew install git-extras
+
+sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+
+git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions
+
+
+Edit : zsh
+vi ~/.zshrc 
+
+ZSH_THEME="gnzh"
+ZSH_THEME="lukerandall"
+ENABLE_CORRECTION="true"
+
+source ~/.zshrc
+
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+
+git clone https://github.com/zsh-users/zsh-completions ${ZSH_CUSTOM:=~/.oh-my-zsh/custom}/plugins/zsh-completions
+
+
+￼
+cp zsh.txt ~/.zshrc
+
+
+
+———IntelliJ code
+
+#!/bin/bash
+open -a "IntelliJ IDEA CE.app" "$1
+
+￼
+
+vi ~/.zshrc
+
+alias idea=/Users/pigke/idea-open.sh
+
+source ~/.zshrc
+
+
+￼
+echo 'alias gittag="$HOME/.gittag.sh"' >> ~/.zshrc
+
