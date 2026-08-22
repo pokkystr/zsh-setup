@@ -4,137 +4,263 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "======================================"
-echo " macOS ZSH Environment Setup"
-echo "======================================"
+printf '%s\n' \
+  '======================================' \
+  ' macOS ZSH Environment Setup' \
+  '======================================'
 
-# --------------------------------------------------
-# 1. Install Homebrew
-# --------------------------------------------------
-if ! command -v brew >/dev/null 2>&1; then
-    echo "[1/7] Installing Homebrew..."
 
+# ==================================================
+# 1. Project files
+# ==================================================
+
+printf '%s\n' '[1/9] Checking project files...'
+
+for required_file in \
+    zsh.txt \
+    gitignore_global.txt \
+    gittag.sh \
+    IntelliJOpen.sh
+do
+    if [ ! -f "$SCRIPT_DIR/$required_file" ]; then
+        printf 'ERROR: Required project file not found: %s\n' \
+          "$SCRIPT_DIR/$required_file" >&2
+        exit 1
+    fi
+done
+
+
+# ==================================================
+# 2. Homebrew
+# ==================================================
+
+printf '%s\n' '[2/9] Checking Homebrew...'
+
+if [ -x /opt/homebrew/bin/brew ]; then
+    BREW_BIN=/opt/homebrew/bin/brew
+elif [ -x /usr/local/bin/brew ]; then
+    BREW_BIN=/usr/local/bin/brew
+else
+    printf '%s\n' 'Installing Homebrew...'
     /bin/bash -c "$(curl -fsSL \
       https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    if [ -x /opt/homebrew/bin/brew ]; then
+        BREW_BIN=/opt/homebrew/bin/brew
+    elif [ -x /usr/local/bin/brew ]; then
+        BREW_BIN=/usr/local/bin/brew
+    else
+        printf '%s\n' 'ERROR: Homebrew installation not found in a standard prefix' >&2
+        exit 1
+    fi
+fi
+
+eval "$("$BREW_BIN" shellenv)"
+hash -r
+
+BREW_PREFIX="$("$BREW_BIN" --prefix)"
+
+printf 'Homebrew: %s\n' "$BREW_BIN"
+
+
+# ==================================================
+# 3. Original backups
+# ==================================================
+
+printf '%s\n' '[3/9] Preserving original configuration...'
+
+if [ ! -e "$HOME/.zshrc.backup" ]; then
+    if [ -e "$HOME/.zshrc" ]; then
+        cp -p "$HOME/.zshrc" "$HOME/.zshrc.backup"
+        printf 'Original backup created: %s\n' "$HOME/.zshrc.backup"
+    else
+        touch "$HOME/.zshrc.backup"
+        printf 'Empty backup sentinel created: %s\n' "$HOME/.zshrc.backup"
+    fi
 else
-    echo "[1/7] Homebrew already installed"
+    printf 'Keeping existing backup: %s\n' "$HOME/.zshrc.backup"
 fi
 
-# Apple Silicon Homebrew
-if [ -x /opt/homebrew/bin/brew ]; then
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-fi
-
-# --------------------------------------------------
-# 2. Install ZSH + packages
-# --------------------------------------------------
-echo "[2/7] Installing packages..."
-
-brew install zsh git git-extras fzf
-
-# --------------------------------------------------
-# 3. Install Oh My Zsh
-# --------------------------------------------------
-if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    echo "[3/7] Installing Oh My Zsh..."
-
-    RUNZSH=no CHSH=no sh -c \
-      "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+if [ ! -e "$HOME/.gitignore_global.backup" ]; then
+    if [ -e "$HOME/.gitignore_global" ]; then
+        cp -p "$HOME/.gitignore_global" "$HOME/.gitignore_global.backup"
+        printf 'Original backup created: %s\n' "$HOME/.gitignore_global.backup"
+    else
+        touch "$HOME/.gitignore_global.backup"
+        printf 'Empty backup sentinel created: %s\n' \
+          "$HOME/.gitignore_global.backup"
+    fi
 else
-    echo "[3/7] Oh My Zsh already installed"
+    printf 'Keeping existing backup: %s\n' "$HOME/.gitignore_global.backup"
 fi
 
-ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
 
-# --------------------------------------------------
-# 4. Install ZSH plugins
-# --------------------------------------------------
-echo "[4/7] Installing ZSH plugins..."
+# ==================================================
+# 4. Homebrew packages
+# ==================================================
 
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-autosuggestions" ]; then
-    git clone \
-      https://github.com/zsh-users/zsh-autosuggestions \
-      "$ZSH_CUSTOM/plugins/zsh-autosuggestions"
+printf '%s\n' '[4/9] Installing Homebrew packages...'
+
+for formula in zsh git git-extras fzf; do
+    if "$BREW_BIN" list --formula "$formula" >/dev/null 2>&1; then
+        printf '%s already installed\n' "$formula"
+    else
+        "$BREW_BIN" install "$formula"
+    fi
+done
+
+ZSH_PATH="$BREW_PREFIX/bin/zsh"
+GIT_BIN="$BREW_PREFIX/bin/git"
+
+if [ ! -x "$ZSH_PATH" ]; then
+    printf 'ERROR: Homebrew ZSH not found: %s\n' "$ZSH_PATH" >&2
+    exit 1
 fi
 
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-completions" ]; then
-    git clone \
-      https://github.com/zsh-users/zsh-completions \
-      "$ZSH_CUSTOM/plugins/zsh-completions"
+if [ ! -x "$GIT_BIN" ]; then
+    printf 'ERROR: Homebrew Git not found: %s\n' "$GIT_BIN" >&2
+    exit 1
 fi
 
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-history-substring-search" ]; then
-    git clone \
-      https://github.com/zsh-users/zsh-history-substring-search \
-      "$ZSH_CUSTOM/plugins/zsh-history-substring-search"
+
+# ==================================================
+# 5. Oh My Zsh
+# ==================================================
+
+printf '%s\n' '[5/9] Checking Oh My Zsh...'
+
+OMZ_DIR="$HOME/.oh-my-zsh"
+ZSH_CUSTOM="$OMZ_DIR/custom"
+
+if [ ! -d "$OMZ_DIR" ]; then
+    printf '%s\n' 'Installing Oh My Zsh...'
+    RUNZSH=no CHSH=no KEEP_ZSHRC=yes ZSH="$OMZ_DIR" sh -c \
+      "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" \
+      '' --unattended --keep-zshrc
+else
+    printf '%s\n' 'Oh My Zsh already installed'
 fi
 
-if [ ! -d "$ZSH_CUSTOM/plugins/fzf-tab" ]; then
-    git clone \
-      https://github.com/Aloxaf/fzf-tab \
-      "$ZSH_CUSTOM/plugins/fzf-tab"
-fi
+mkdir -p "$ZSH_CUSTOM/plugins"
 
-if [ ! -d "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting" ]; then
-    git clone \
-      https://github.com/zsh-users/zsh-syntax-highlighting.git \
-      "$ZSH_CUSTOM/plugins/zsh-syntax-highlighting"
-fi
 
-# --------------------------------------------------
-# 5. Restore .zshrc
-# --------------------------------------------------
-echo "[5/7] Restoring .zshrc..."
+# ==================================================
+# 6. ZSH plugins
+# ==================================================
 
-if [ -f "$HOME/.zshrc" ]; then
-    BACKUP="$HOME/.zshrc.backup.$(date +%Y%m%d_%H%M%S)"
-    cp "$HOME/.zshrc" "$BACKUP"
+printf '%s\n' '[6/9] Installing ZSH plugins...'
 
-    echo "Backup:"
-    echo "  $BACKUP"
-fi
+install_plugin() {
+    local name="$1"
+    local repo="$2"
+    local target="$ZSH_CUSTOM/plugins/$name"
 
-cp "$SCRIPT_DIR/zsh.txt" "$HOME/.zshrc"
-
-# --------------------------------------------------
-# 6. Install helper scripts
-# --------------------------------------------------
-echo "[6/7] Installing helper scripts..."
-
-cp "$SCRIPT_DIR/gittag.sh" "$HOME/.gittag.sh"
-chmod +x "$HOME/.gittag.sh"
-
-cp "$SCRIPT_DIR/IntelliJOpen.sh" "$HOME/.IntelliJOpen.sh"
-chmod +x "$HOME/.IntelliJOpen.sh"
-
-# Fix IntelliJ alias because original zsh.txt points to Documents
-sed -i '' \
-  's|alias idea=/Users/pigke/Documents/IntelliJOpen.sh|alias idea="$HOME/IntelliJOpen.sh"|' \
-  "$HOME/.zshrc"
-
-# --------------------------------------------------
-# 7. Set ZSH as default shell
-# --------------------------------------------------
-echo "[7/7] Checking default shell..."
-
-ZSH_PATH="$(command -v zsh)"
-
-if [ "$SHELL" != "$ZSH_PATH" ]; then
-
-    if ! grep -qx "$ZSH_PATH" /etc/shells; then
-        echo "$ZSH_PATH" | sudo tee -a /etc/shells
+    if [ -d "$target" ]; then
+        printf '%s already installed\n' "$name"
+        return
     fi
 
-    chsh -s "$ZSH_PATH"
+    if [ -e "$target" ]; then
+        printf 'ERROR: Plugin target exists but is not a directory: %s\n' \
+          "$target" >&2
+        exit 1
+    fi
+
+    printf 'Installing %s...\n' "$name"
+    "$GIT_BIN" clone --depth=1 "$repo" "$target"
+}
+
+install_plugin zsh-completions \
+  https://github.com/zsh-users/zsh-completions
+install_plugin fzf-tab \
+  https://github.com/Aloxaf/fzf-tab
+install_plugin zsh-autosuggestions \
+  https://github.com/zsh-users/zsh-autosuggestions
+install_plugin zsh-history-substring-search \
+  https://github.com/zsh-users/zsh-history-substring-search
+install_plugin zsh-syntax-highlighting \
+  https://github.com/zsh-users/zsh-syntax-highlighting
+
+
+# ==================================================
+# 7. User configuration
+# ==================================================
+
+printf '%s\n' '[7/9] Installing user configuration...'
+
+install -m 644 "$SCRIPT_DIR/zsh.txt" "$HOME/.zshrc"
+install -m 644 "$SCRIPT_DIR/gitignore_global.txt" "$HOME/.gitignore_global"
+install -m 755 "$SCRIPT_DIR/gittag.sh" "$HOME/.gittag.sh"
+install -m 755 "$SCRIPT_DIR/IntelliJOpen.sh" "$HOME/.IntelliJOpen.sh"
+
+"$GIT_BIN" config --global core.excludesfile "$HOME/.gitignore_global"
+"$GIT_BIN" config --global push.autoSetupRemote true
+
+printf 'Installed: %s\n' \
+  "$HOME/.zshrc" \
+  "$HOME/.gitignore_global" \
+  "$HOME/.gittag.sh" \
+  "$HOME/.IntelliJOpen.sh"
+
+
+# ==================================================
+# 8. Default shell
+# ==================================================
+
+printf '%s\n' '[8/9] Checking default shell...'
+
+if ! grep -Fqx "$ZSH_PATH" /etc/shells; then
+    printf 'Adding Homebrew ZSH to /etc/shells: %s\n' "$ZSH_PATH"
+    printf '%s\n' "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
 fi
 
-echo
-echo "======================================"
-echo " Setup completed"
-echo "======================================"
-echo
-echo "Run:"
-echo
-echo "    source ~/.zshrc"
-echo
-echo "or restart Terminal."
+CURRENT_LOGIN_SHELL="$(
+    dscl . -read "$HOME" UserShell 2>/dev/null | awk '{print $2}' || true
+)"
+
+if [ "$CURRENT_LOGIN_SHELL" != "$ZSH_PATH" ]; then
+    printf 'Changing default shell: %s -> %s\n' \
+      "${CURRENT_LOGIN_SHELL:-unknown}" "$ZSH_PATH"
+    chsh -s "$ZSH_PATH"
+else
+    printf 'Homebrew ZSH is already the default shell: %s\n' "$ZSH_PATH"
+fi
+
+
+# ==================================================
+# 9. Direct verification
+# ==================================================
+
+printf '%s\n' \
+  '[9/9] Verifying installed tools...' \
+  '' \
+  '======================================' \
+  ' Verification' \
+  '======================================'
+
+printf 'Homebrew: %s (%s)\n' \
+  "$BREW_BIN" "$("$BREW_BIN" --version | head -1)"
+printf 'ZSH:      %s (%s)\n' \
+  "$ZSH_PATH" "$("$ZSH_PATH" --version)"
+printf 'Git:      %s (%s)\n' \
+  "$GIT_BIN" "$("$GIT_BIN" --version)"
+printf 'fzf:      %s (%s)\n' \
+  "$BREW_PREFIX/bin/fzf" "$("$BREW_PREFIX/bin/fzf" --version)"
+printf 'push.autoSetupRemote: %s\n' \
+  "$("$GIT_BIN" config --global --get push.autoSetupRemote)"
+printf 'core.excludesfile:    %s\n' \
+  "$("$GIT_BIN" config --global --get core.excludesfile)"
+
+printf '%s\n' \
+  '' \
+  '======================================' \
+  ' Setup completed' \
+  '======================================' \
+  '' \
+  'Open a Homebrew ZSH login shell:' \
+  '' \
+  '  exec "$(brew --prefix)/bin/zsh" -l' \
+  '' \
+  'Then verify:' \
+  '' \
+  '  ./recheck-setup.sh'

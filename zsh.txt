@@ -1,4 +1,22 @@
 # ==================================================
+# Homebrew Environment
+# ==================================================
+#
+# macOS runs path_helper for login shells before ~/.zshrc. Initialize
+# Homebrew here so its bin and sbin directories stay ahead of the system
+# paths before Oh My Zsh and its plugins modify PATH.
+
+if [[ -x /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -x /usr/local/bin/brew ]]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+
+# Keep PATH unique when plugins such as gcloud prepend existing entries.
+typeset -U path PATH
+
+
+# ==================================================
 # Environment
 # ==================================================
 
@@ -128,15 +146,6 @@ plugins=(
   gitignore
 
   # ------------------------------------------------
-  # ZSH UX / Completion
-  # ------------------------------------------------
-  zsh-completions
-  fzf-tab
-  zsh-autosuggestions
-  zsh-history-substring-search
-  zsh-syntax-highlighting
-
-  # ------------------------------------------------
   # Utility
   # ------------------------------------------------
   cp
@@ -203,6 +212,18 @@ plugins=(
   # ------------------------------------------------
   heroku
   supervisor
+
+  # ------------------------------------------------
+  # Custom ZSH UX / Completion
+  #
+  # Keep these last. fzf-tab and the highlighting plugins wrap ZLE
+  # widgets, and zsh-syntax-highlighting must be loaded last.
+  # ------------------------------------------------
+  zsh-completions
+  fzf-tab
+  zsh-autosuggestions
+  zsh-history-substring-search
+  zsh-syntax-highlighting
 )
 
 
