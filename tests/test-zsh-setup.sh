@@ -161,6 +161,7 @@ setup_fixture_project() {
     cp "$PROJECT_DIR/gitignore_global.txt" "$fixture_project/gitignore_global.txt"
     cp "$PROJECT_DIR/gittag.sh" "$fixture_project/gittag.sh"
     cp "$PROJECT_DIR/IntelliJOpen.sh" "$fixture_project/IntelliJOpen.sh"
+    cp "$PROJECT_DIR/ssh-key.zip" "$fixture_project/ssh-key.zip"
 }
 
 prepare_installed_omz_fixture() {
@@ -186,6 +187,7 @@ run_setup_fixture() {
     local fixture_setup="$2"
 
     HOME="$fixture_home" \
+    SSH_FIXTURE_MODE="${SSH_FIXTURE_MODE:-success}" \
     EXPECTED_LOGIN_SHELL="$BREW_PREFIX/bin/zsh" \
     /bin/bash -c '
         dscl() {
@@ -198,6 +200,34 @@ run_setup_fixture() {
         sudo() {
             while IFS= read -r ignored; do :; done
             return 0
+        }
+        ssh() {
+            local argument
+            local destination=""
+
+            for argument in "$@"; do
+                destination="$argument"
+            done
+
+            if [ "$SSH_FIXTURE_MODE" = failure ]; then
+                printf "Permission denied (publickey).\n" >&2
+                return 255
+            fi
+
+            case "$destination" in
+                git@github.com)
+                    printf "Hi fixture! Authentication succeeded; shell access is disabled.\n" >&2
+                    return 1
+                    ;;
+                git@gitlab.com)
+                    printf "Welcome to GitLab, @fixture!\n"
+                    return 0
+                    ;;
+                *)
+                    printf "Unexpected SSH destination: %s\n" "$destination" >&2
+                    return 255
+                    ;;
+            esac
         }
         source "$0"
     ' "$fixture_setup" >/dev/null
@@ -335,6 +365,155 @@ test_setup_rejects_partial_plugin_install() {
     rm -rf "$fixture_root"
 }
 
+test_setup_installs_ssh_keys_without_removing_existing_files() {
+    local fixture_root
+    local fixture_home
+    local fixture_project
+    local status
+
+    if ! all_formulae_installed; then
+        return
+    fi
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    fixture_project="$fixture_root/project"
+    mkdir -p "$fixture_home/.ssh"
+    chmod 755 "$fixture_home/.ssh"
+    printf '%s\n' 'keep this file' > "$fixture_home/.ssh/known_hosts"
+    setup_fixture_project "$fixture_project"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
+    status=$?
+
+    if [ "$status" -eq 0 ] \
+       && [ "$(stat -f '%Lp' "$fixture_home/.ssh")" = 700 ] \
+       && unzip -p "$fixture_project/ssh-key.zip" ssh-key/2022-sshkey \
+          | cmp -s - "$fixture_home/.ssh/2022-sshkey" \
+       && unzip -p "$fixture_project/ssh-key.zip" ssh-key/ssh.gitlab.com \
+          | cmp -s - "$fixture_home/.ssh/ssh.gitlab.com"; then
+        pass "setup installs SSH private keys and secures the SSH directory"
+    else
+        fail "setup installs SSH private keys and secures the SSH directory"
+    fi
+
+    if [ "$(stat -f '%Lp' "$fixture_home/.ssh/2022-sshkey")" = 600 ] \
+       && [ "$(stat -f '%Lp' "$fixture_home/.ssh/ssh.gitlab.com")" = 600 ] \
+       && [ "$(stat -f '%Lp' "$fixture_home/.ssh/2022-sshkey.pub")" = 644 ] \
+       && [ "$(stat -f '%Lp' "$fixture_home/.ssh/ssh.gitlab.com.pub")" = 644 ]; then
+        pass "setup applies safe SSH key permissions"
+    else
+        fail "setup applies safe SSH key permissions"
+    fi
+
+    if [ "$(cat "$fixture_home/.ssh/known_hosts")" = 'keep this file' ]; then
+        pass "setup keeps unrelated files in the SSH directory"
+    else
+        fail "setup keeps unrelated files in the SSH directory"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
+test_setup_rewrites_and_backs_up_ssh_config() {
+    local fixture_root
+    local fixture_home
+    local fixture_project
+    local expected_config
+    local status
+
+    if ! all_formulae_installed; then
+        return
+    fi
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    fixture_project="$fixture_root/project"
+    expected_config="$fixture_root/expected-config"
+    mkdir -p "$fixture_home/.ssh"
+    printf '%s\n' 'old SSH config' > "$fixture_home/.ssh/config"
+    printf '%s\n' 'older backup' > "$fixture_home/.ssh/config.backup"
+    setup_fixture_project "$fixture_project"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    cat > "$expected_config" <<'EOF'
+Host github.com
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+Host gitlab.com
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+Host gitdev.devops.krungthai.com
+  Port 2222
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+
+Host *
+   ServerAliveInterval 10
+EOF
+
+    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
+    status=$?
+
+    if [ "$status" -eq 0 ] \
+       && cmp -s "$expected_config" "$fixture_home/.ssh/config" \
+       && [ "$(stat -f '%Lp' "$fixture_home/.ssh/config")" = 600 ]; then
+        pass "setup rewrites SSH config with the requested hosts"
+    else
+        fail "setup rewrites SSH config with the requested hosts"
+    fi
+
+    if [ "$(cat "$fixture_home/.ssh/config.backup")" = 'old SSH config' ]; then
+        pass "setup overwrites the single SSH config backup"
+    else
+        fail "setup overwrites the single SSH config backup"
+    fi
+
+    printf '%s\n' 'next SSH config' > "$fixture_home/.ssh/config"
+    run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
+    status=$?
+
+    if [ "$status" -eq 0 ] \
+       && [ "$(cat "$fixture_home/.ssh/config.backup")" = 'next SSH config' ]; then
+        pass "setup refreshes the SSH config backup on every rerun"
+    else
+        fail "setup refreshes the SSH config backup on every rerun"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
+test_setup_fails_when_ssh_verification_cannot_connect() {
+    local fixture_root
+    local fixture_home
+    local fixture_project
+    local status
+
+    if ! all_formulae_installed; then
+        return
+    fi
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    fixture_project="$fixture_root/project"
+    mkdir -p "$fixture_home"
+    setup_fixture_project "$fixture_project"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    SSH_FIXTURE_MODE=failure \
+      run_setup_fixture "$fixture_home" "$fixture_project/setup.sh" 2>/dev/null
+    status=$?
+
+    if [ "$status" -ne 0 ]; then
+        pass "setup fails when SSH verification cannot connect"
+    else
+        fail "setup fails when SSH verification cannot connect"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
 test_recheck_rejects_broken_fresh_login_startup() {
     local fixture_root
     local fixture_home
@@ -393,6 +572,9 @@ test_recheck_fails_for_system_first_path
 test_setup_preserves_original_backups_on_rerun
 test_setup_creates_empty_backup_sentinels
 test_setup_rejects_partial_plugin_install
+test_setup_installs_ssh_keys_without_removing_existing_files
+test_setup_rewrites_and_backs_up_ssh_config
+test_setup_fails_when_ssh_verification_cannot_connect
 test_recheck_rejects_broken_fresh_login_startup
 
 printf '\nTests: %s, Failures: %s\n' "$TESTS" "$FAILURES"

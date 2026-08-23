@@ -14,13 +14,14 @@ printf '%s\n' \
 # 1. Project files
 # ==================================================
 
-printf '%s\n' '[1/9] Checking project files...'
+printf '%s\n' '[1/11] Checking project files...'
 
 for required_file in \
     zsh.txt \
     gitignore_global.txt \
     gittag.sh \
-    IntelliJOpen.sh
+    IntelliJOpen.sh \
+    ssh-key.zip
 do
     if [ ! -f "$SCRIPT_DIR/$required_file" ]; then
         printf 'ERROR: Required project file not found: %s\n' \
@@ -34,7 +35,7 @@ done
 # 2. Homebrew
 # ==================================================
 
-printf '%s\n' '[2/9] Checking Homebrew...'
+printf '%s\n' '[2/11] Checking Homebrew...'
 
 if [ -x /opt/homebrew/bin/brew ]; then
     BREW_BIN=/opt/homebrew/bin/brew
@@ -67,7 +68,7 @@ printf 'Homebrew: %s\n' "$BREW_BIN"
 # 3. Original backups
 # ==================================================
 
-printf '%s\n' '[3/9] Preserving original configuration...'
+printf '%s\n' '[3/11] Preserving original configuration...'
 
 if [ ! -e "$HOME/.zshrc.backup" ]; then
     if [ -e "$HOME/.zshrc" ]; then
@@ -99,7 +100,7 @@ fi
 # 4. Homebrew packages
 # ==================================================
 
-printf '%s\n' '[4/9] Installing Homebrew packages...'
+printf '%s\n' '[4/11] Installing Homebrew packages...'
 
 for formula in zsh git git-extras fzf; do
     if "$BREW_BIN" list --formula "$formula" >/dev/null 2>&1; then
@@ -127,7 +128,7 @@ fi
 # 5. Oh My Zsh
 # ==================================================
 
-printf '%s\n' '[5/9] Checking Oh My Zsh...'
+printf '%s\n' '[5/11] Checking Oh My Zsh...'
 
 OMZ_DIR="$HOME/.oh-my-zsh"
 ZSH_CUSTOM="$OMZ_DIR/custom"
@@ -159,7 +160,7 @@ mkdir -p "$ZSH_CUSTOM/plugins"
 # 6. ZSH plugins
 # ==================================================
 
-printf '%s\n' '[6/9] Installing ZSH plugins...'
+printf '%s\n' '[6/11] Installing ZSH plugins...'
 
 install_plugin() {
     local name="$1"
@@ -215,7 +216,7 @@ install_plugin zsh-syntax-highlighting \
 # 7. User configuration
 # ==================================================
 
-printf '%s\n' '[7/9] Installing user configuration...'
+printf '%s\n' '[7/11] Installing user configuration...'
 
 install -m 644 "$SCRIPT_DIR/zsh.txt" "$HOME/.zshrc"
 install -m 644 "$SCRIPT_DIR/gitignore_global.txt" "$HOME/.gitignore_global"
@@ -233,10 +234,79 @@ printf 'Installed: %s\n' \
 
 
 # ==================================================
-# 8. Default shell
+# 8. SSH keys and configuration
 # ==================================================
 
-printf '%s\n' '[8/9] Checking default shell...'
+printf '%s\n' '[8/11] Installing SSH keys and configuration...'
+
+SSH_DIR="$HOME/.ssh"
+SSH_KEY_ARCHIVE="$SCRIPT_DIR/ssh-key.zip"
+SSH_KEY_TEMP_DIR="$(mktemp -d)"
+
+cleanup_ssh_key_temp() {
+    rm -rf "$SSH_KEY_TEMP_DIR"
+}
+
+trap cleanup_ssh_key_temp EXIT HUP INT TERM
+
+install -d -m 700 "$SSH_DIR"
+/usr/bin/unzip -q "$SSH_KEY_ARCHIVE" -d "$SSH_KEY_TEMP_DIR"
+
+for private_key in 2022-sshkey ssh.gitlab.com; do
+    if [ ! -f "$SSH_KEY_TEMP_DIR/ssh-key/$private_key" ]; then
+        printf 'ERROR: SSH private key not found in archive: %s\n' \
+          "ssh-key/$private_key" >&2
+        exit 1
+    fi
+
+    install -m 600 \
+      "$SSH_KEY_TEMP_DIR/ssh-key/$private_key" \
+      "$SSH_DIR/$private_key"
+done
+
+for public_key in 2022-sshkey.pub ssh.gitlab.com.pub; do
+    if [ -f "$SSH_KEY_TEMP_DIR/ssh-key/$public_key" ]; then
+        install -m 644 \
+          "$SSH_KEY_TEMP_DIR/ssh-key/$public_key" \
+          "$SSH_DIR/$public_key"
+    fi
+done
+
+if [ -f "$SSH_DIR/config" ]; then
+    cp -p "$SSH_DIR/config" "$SSH_DIR/config.backup"
+    chmod 600 "$SSH_DIR/config.backup"
+    printf 'SSH config backup refreshed: %s\n' "$SSH_DIR/config.backup"
+fi
+
+cat > "$SSH_KEY_TEMP_DIR/config" <<'EOF'
+Host github.com
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+Host gitlab.com
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+Host gitdev.devops.krungthai.com
+  Port 2222
+  Preferredauthentications publickey
+  IdentityFile ~/.ssh/2022-sshkey
+
+Host *
+   ServerAliveInterval 10
+EOF
+
+install -m 600 "$SSH_KEY_TEMP_DIR/config" "$SSH_DIR/config"
+
+cleanup_ssh_key_temp
+trap - EXIT HUP INT TERM
+
+printf 'Installed SSH keys and config in: %s\n' "$SSH_DIR"
+
+
+# ==================================================
+# 9. Default shell
+# ==================================================
+
+printf '%s\n' '[9/11] Checking default shell...'
 
 if ! grep -Fqx "$ZSH_PATH" /etc/shells; then
     printf 'Adding Homebrew ZSH to /etc/shells: %s\n' "$ZSH_PATH"
@@ -257,11 +327,11 @@ fi
 
 
 # ==================================================
-# 9. Direct verification
+# 10. Direct verification
 # ==================================================
 
 printf '%s\n' \
-  '[9/9] Verifying installed tools...' \
+  '[10/11] Verifying installed tools...' \
   '' \
   '======================================' \
   ' Verification' \
@@ -279,6 +349,49 @@ printf 'push.autoSetupRemote: %s\n' \
   "$("$GIT_BIN" config --global --get push.autoSetupRemote)"
 printf 'core.excludesfile:    %s\n' \
   "$("$GIT_BIN" config --global --get core.excludesfile)"
+
+
+# ==================================================
+# 11. SSH connection verification
+# ==================================================
+
+printf '%s\n' '[11/11] Verifying SSH connections...'
+
+verify_ssh_connection() {
+    local destination="$1"
+    local output
+    local status
+
+    if output="$(
+        ssh \
+          -o BatchMode=yes \
+          -o ConnectTimeout=10 \
+          -o StrictHostKeyChecking=accept-new \
+          -T "$destination" 2>&1
+    )"; then
+        status=0
+    else
+        status=$?
+    fi
+
+    if [ -n "$output" ]; then
+        printf '%s\n' "$output"
+    fi
+
+    case "$status" in
+        0|1)
+            printf 'SSH connection verified: %s\n' "$destination"
+            ;;
+        *)
+            printf 'ERROR: SSH connection failed: %s (exit %s)\n' \
+              "$destination" "$status" >&2
+            return 1
+            ;;
+    esac
+}
+
+verify_ssh_connection git@github.com
+verify_ssh_connection git@gitlab.com
 
 printf '%s\n' \
   '' \
