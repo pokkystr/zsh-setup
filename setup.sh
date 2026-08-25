@@ -220,8 +220,14 @@ printf '%s\n' '[7/11] Installing user configuration...'
 
 install -m 644 "$SCRIPT_DIR/zsh.txt" "$HOME/.zshrc"
 install -m 644 "$SCRIPT_DIR/gitignore_global.txt" "$HOME/.gitignore_global"
+
 install -m 755 "$SCRIPT_DIR/gittag.sh" "$HOME/.gittag.sh"
+xattr -d com.apple.quarantine \
+  "$HOME/.gittag.sh" 2>/dev/null || true
+
 install -m 755 "$SCRIPT_DIR/IntelliJOpen.sh" "$HOME/.IntelliJOpen.sh"
+xattr -d com.apple.quarantine \
+  "$HOME/.IntelliJOpen.sh" 2>/dev/null || true
 
 "$GIT_BIN" config --global core.excludesfile "$HOME/.gitignore_global"
 "$GIT_BIN" config --global push.autoSetupRemote true
