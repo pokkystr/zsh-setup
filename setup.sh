@@ -20,6 +20,7 @@ for required_file in \
     zsh.txt \
     gitignore_global.txt \
     gittag.sh \
+    gitsync.sh \
     IntelliJOpen.sh \
     ssh-key.zip
 do
@@ -229,6 +230,10 @@ install -m 755 "$SCRIPT_DIR/IntelliJOpen.sh" "$HOME/.IntelliJOpen.sh"
 xattr -d com.apple.quarantine \
   "$HOME/.IntelliJOpen.sh" 2>/dev/null || true
 
+install -m 755 "$SCRIPT_DIR/gitsync.sh" "$HOME/.gitsync.sh"
+xattr -d com.apple.quarantine \
+  "$HOME/.gitsync.sh" 2>/dev/null || true
+
 "$GIT_BIN" config --global core.excludesfile "$HOME/.gitignore_global"
 "$GIT_BIN" config --global push.autoSetupRemote true
 
@@ -236,6 +241,7 @@ printf 'Installed: %s\n' \
   "$HOME/.zshrc" \
   "$HOME/.gitignore_global" \
   "$HOME/.gittag.sh" \
+  "$HOME/.gitsync.sh" \
   "$HOME/.IntelliJOpen.sh"
 
 

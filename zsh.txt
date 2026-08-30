@@ -35,8 +35,8 @@ export INC_FRAMEWORK_CONFIG_PATH="$HOME/Documents/template/config/template_frame
 # Default Oh My Zsh theme
 # Example:
 # ZSH_THEME="robbyrussell"
-ZSH_THEME="af-magic"
-# ZSH_THEME="gnzh"
+# ZSH_THEME="af-magic"
+ZSH_THEME="gnzh"
 
 # Use random theme
 # ZSH_THEME="random"
@@ -283,6 +283,7 @@ source "$ZSH/oh-my-zsh.sh"
 # --------------------------------------------------
 
 alias gittag="$HOME/.gittag.sh"
+alias gitsync="$HOME/.gitsync.sh"
 alias idea="$HOME/.IntelliJOpen.sh"
 
 
