@@ -285,6 +285,8 @@ source "$ZSH/oh-my-zsh.sh"
 alias gittag="$HOME/.gittag.sh"
 alias gitsync="$HOME/.gitsync.sh"
 alias idea="$HOME/.IntelliJOpen.sh"
+alias ai="$HOME/ai-agent"
+alias ai-agent="$HOME/ai-agent"
 
 
 # --------------------------------------------------
