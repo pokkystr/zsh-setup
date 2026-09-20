@@ -118,6 +118,8 @@ test_zsh_template_prioritizes_homebrew() {
 
     assert_path_precedes "$BREW_PREFIX/bin" /usr/bin "$final_path" "Homebrew bin precedes /usr/bin"
     assert_path_precedes "$BREW_PREFIX/sbin" /bin "$final_path" "Homebrew sbin precedes /bin"
+    assert_path_precedes "$test_home/.local/bin" "$BREW_PREFIX/bin" "$final_path" \
+      "User-local bin precedes Homebrew bin"
 
     duplicates="$(printf '%s\n' "$final_path" | tr ':' '\n' | sort | uniq -d)"
     if [ -z "$duplicates" ]; then
@@ -160,7 +162,9 @@ setup_fixture_project() {
     cp "$PROJECT_DIR/zsh.txt" "$fixture_project/zsh.txt"
     cp "$PROJECT_DIR/gitignore_global.txt" "$fixture_project/gitignore_global.txt"
     cp "$PROJECT_DIR/gittag.sh" "$fixture_project/gittag.sh"
+    cp "$PROJECT_DIR/gitsync.sh" "$fixture_project/gitsync.sh"
     cp "$PROJECT_DIR/IntelliJOpen.sh" "$fixture_project/IntelliJOpen.sh"
+    cp "$PROJECT_DIR/orca.sh" "$fixture_project/orca.sh"
     cp "$PROJECT_DIR/ssh-key.zip" "$fixture_project/ssh-key.zip"
 }
 
@@ -180,6 +184,242 @@ prepare_installed_omz_fixture() {
         mkdir -p "$fixture_home/.oh-my-zsh/custom/plugins/$plugin"
         touch "$fixture_home/.oh-my-zsh/custom/plugins/$plugin/$plugin.plugin.zsh"
     done
+}
+
+test_zsh_template_loads_local_configuration() {
+    local fixture_home
+    local output
+
+    fixture_home="$(mktemp -d)"
+    prepare_installed_omz_fixture "$fixture_home"
+    printf '%s\n' 'export ZSH_SETUP_LOCAL_CONFIG=loaded' \
+      > "$fixture_home/.zshrc.local"
+
+    output="$(
+        HOME="$fixture_home" "$BREW_PREFIX/bin/zsh" -dfc '
+            source "$1"
+            print -r -- "${ZSH_SETUP_LOCAL_CONFIG:-missing}"
+        ' _ "$PROJECT_DIR/zsh.txt"
+    )"
+
+    if [ "$output" = loaded ]; then
+        pass "zsh.txt loads machine-local configuration"
+    else
+        fail "zsh.txt loads machine-local configuration (got $output)"
+    fi
+
+    rm -rf "$fixture_home"
+}
+
+test_zsh_template_binds_history_substring_search() {
+    local fixture_home
+    local output
+
+    fixture_home="$(mktemp -d)"
+    prepare_installed_omz_fixture "$fixture_home"
+    cat > "$fixture_home/.oh-my-zsh/oh-my-zsh.sh" <<'EOF'
+history-substring-search-up() { :; }
+history-substring-search-down() { :; }
+zle -N history-substring-search-up
+zle -N history-substring-search-down
+EOF
+
+    output="$(
+        HOME="$fixture_home" "$BREW_PREFIX/bin/zsh" -dfc '
+            source "$1"
+            bindkey "^[[A"
+            bindkey "^[[B"
+        ' _ "$PROJECT_DIR/zsh.txt"
+    )"
+
+    if printf '%s\n' "$output" \
+         | grep -Fq '"^[[A" history-substring-search-up' \
+       && printf '%s\n' "$output" \
+         | grep -Fq '"^[[B" history-substring-search-down'; then
+        pass "zsh.txt binds arrow keys to history substring search"
+    else
+        fail "zsh.txt binds arrow keys to history substring search (got $output)"
+    fi
+
+    rm -rf "$fixture_home"
+}
+
+test_git_prune_local_removes_only_gone_noncurrent_branches() {
+    local fixture_root
+    local fixture_home
+    local remote_repo
+    local work_repo
+    local output
+    local status
+
+    fixture_root="$(mktemp -d)"
+    fixture_home="$fixture_root/home"
+    remote_repo="$fixture_root/remote.git"
+    work_repo="$fixture_root/work"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    "$BREW_PREFIX/bin/git" init --bare "$remote_repo" >/dev/null
+    "$BREW_PREFIX/bin/git" clone "$remote_repo" "$work_repo" >/dev/null 2>&1
+    "$BREW_PREFIX/bin/git" -C "$work_repo" config user.name fixture
+    "$BREW_PREFIX/bin/git" -C "$work_repo" config user.email fixture@example.com
+    printf '%s\n' fixture > "$work_repo/README.md"
+    "$BREW_PREFIX/bin/git" -C "$work_repo" add README.md
+    "$BREW_PREFIX/bin/git" -C "$work_repo" commit -m initial >/dev/null
+    "$BREW_PREFIX/bin/git" -C "$work_repo" branch -M main
+    "$BREW_PREFIX/bin/git" -C "$work_repo" push -u origin main >/dev/null 2>&1
+    "$BREW_PREFIX/bin/git" -C "$work_repo" branch stale
+    "$BREW_PREFIX/bin/git" -C "$work_repo" push -u origin stale >/dev/null 2>&1
+    "$BREW_PREFIX/bin/git" -C "$work_repo" switch -c current-gone >/dev/null
+    "$BREW_PREFIX/bin/git" -C "$work_repo" push -u origin current-gone >/dev/null 2>&1
+    "$BREW_PREFIX/bin/git" --git-dir="$remote_repo" update-ref -d refs/heads/stale
+    "$BREW_PREFIX/bin/git" --git-dir="$remote_repo" update-ref -d refs/heads/current-gone
+
+    output="$(
+        HOME="$fixture_home" "$BREW_PREFIX/bin/zsh" -dfc '
+            source "$1"
+            cd "$2"
+            git-prune-local
+            print -r -- "current=$(git branch --show-current)"
+            if git show-ref --verify --quiet refs/heads/stale; then
+                print -r -- stale=present
+            else
+                print -r -- stale=absent
+            fi
+        ' _ "$PROJECT_DIR/zsh.txt" "$work_repo" 2>&1
+    )"
+    status=$?
+
+    if [ "$status" -eq 0 ] \
+       && printf '%s\n' "$output" | grep -Fq 'current=current-gone' \
+       && printf '%s\n' "$output" | grep -Fq 'stale=absent'; then
+        pass "git-prune-local removes gone branches and keeps the current branch"
+    else
+        fail "git-prune-local removes gone branches and keeps the current branch (got $output)"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
+test_zsh_template_omits_unused_plugins() {
+    local fixture_home
+    local output
+
+    fixture_home="$(mktemp -d)"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    output="$(
+        HOME="$fixture_home" "$BREW_PREFIX/bin/zsh" -dfc '
+            source "$1"
+            for plugin in pod gradle nvm yarn pyenv postgres heroku supervisor; do
+                if (( ${plugins[(Ie)$plugin]} )); then
+                    print -r -- "$plugin"
+                fi
+            done
+        ' _ "$PROJECT_DIR/zsh.txt"
+    )"
+
+    if [ -z "$output" ]; then
+        pass "zsh.txt omits plugins for unused tools"
+    else
+        fail "zsh.txt omits plugins for unused tools (still enabled: $output)"
+    fi
+
+    rm -rf "$fixture_home"
+}
+
+prepare_orca_wrapper_fixture() {
+    local fixture_root="$1"
+
+    mkdir -p \
+      "$fixture_root/wrapper-bin" \
+      "$fixture_root/real-bin" \
+      "$fixture_root/project"
+    cp "$PROJECT_DIR/orca.sh" "$fixture_root/wrapper-bin/orca"
+    chmod 755 "$fixture_root/wrapper-bin/orca"
+
+    cat > "$fixture_root/real-bin/orca" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$@" > "$ORCA_TEST_LOG"
+exit "${ORCA_TEST_EXIT:-0}"
+EOF
+    chmod 755 "$fixture_root/real-bin/orca"
+}
+
+test_orca_wrapper_adds_explicit_directory() {
+    local fixture_root
+    local expected_project_path
+    local expected_log
+    local status
+
+    fixture_root="$(mktemp -d)"
+    expected_log="$fixture_root/expected.log"
+
+    if [ ! -f "$PROJECT_DIR/orca.sh" ]; then
+        fail "orca wrapper adds an explicit directory (orca.sh is missing)"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    prepare_orca_wrapper_fixture "$fixture_root"
+    expected_project_path="$(cd "$fixture_root/project" && pwd -P)"
+    printf '%s\n' \
+      repo \
+      add \
+      --path \
+      "$expected_project_path" \
+      --json \
+      > "$expected_log"
+
+    (
+        cd "$fixture_root/project" || exit 1
+        PATH="$fixture_root/wrapper-bin:$fixture_root/real-bin:/usr/bin:/bin" \
+          ORCA_TEST_LOG="$fixture_root/actual.log" \
+          orca .
+    )
+    status=$?
+
+    if [ "$status" -eq 0 ] \
+       && cmp -s "$expected_log" "$fixture_root/actual.log"; then
+        pass "orca wrapper adds an explicit directory"
+    else
+        fail "orca wrapper adds an explicit directory"
+    fi
+
+    rm -rf "$fixture_root"
+}
+
+test_orca_wrapper_passes_other_commands_through() {
+    local fixture_root
+    local status
+
+    fixture_root="$(mktemp -d)"
+
+    if [ ! -f "$PROJECT_DIR/orca.sh" ]; then
+        fail "orca wrapper passes other commands through (orca.sh is missing)"
+        rm -rf "$fixture_root"
+        return
+    fi
+
+    prepare_orca_wrapper_fixture "$fixture_root"
+    mkdir -p "$fixture_root/project/repo"
+
+    (
+        cd "$fixture_root/project" || exit 1
+        PATH="$fixture_root/wrapper-bin:$fixture_root/real-bin:/usr/bin:/bin" \
+          ORCA_TEST_LOG="$fixture_root/actual.log" \
+          ORCA_TEST_EXIT=23 \
+          orca repo
+    )
+    status=$?
+
+    if [ "$status" -eq 23 ] \
+       && [ "$(cat "$fixture_root/actual.log")" = repo ]; then
+        pass "orca wrapper passes other commands through"
+    else
+        fail "orca wrapper passes other commands through"
+    fi
+
+    rm -rf "$fixture_root"
 }
 
 run_setup_fixture() {
@@ -286,6 +526,12 @@ test_setup_preserves_original_backups_on_rerun() {
         pass "setup installs helper scripts with mode 755"
     else
         fail "setup installs helper scripts with mode 755"
+    fi
+
+    if [ -x "$fixture_home/.local/bin/orca" ]; then
+        pass "setup installs the Orca wrapper"
+    else
+        fail "setup installs the Orca wrapper"
     fi
 
     rm -rf "$fixture_root"
@@ -568,6 +814,12 @@ test_recheck_rejects_broken_fresh_login_startup() {
 
 detect_brew
 test_zsh_template_prioritizes_homebrew
+test_zsh_template_loads_local_configuration
+test_zsh_template_binds_history_substring_search
+test_git_prune_local_removes_only_gone_noncurrent_branches
+test_zsh_template_omits_unused_plugins
+test_orca_wrapper_adds_explicit_directory
+test_orca_wrapper_passes_other_commands_through
 test_recheck_fails_for_system_first_path
 test_setup_preserves_original_backups_on_rerun
 test_setup_creates_empty_backup_sentinels

@@ -22,6 +22,7 @@ for required_file in \
     gittag.sh \
     gitsync.sh \
     IntelliJOpen.sh \
+    orca.sh \
     ssh-key.zip
 do
     if [ ! -f "$SCRIPT_DIR/$required_file" ]; then
@@ -234,6 +235,21 @@ install -m 755 "$SCRIPT_DIR/gitsync.sh" "$HOME/.gitsync.sh"
 xattr -d com.apple.quarantine \
   "$HOME/.gitsync.sh" 2>/dev/null || true
 
+ORCA_WRAPPER_DIR="$HOME/.local/bin"
+ORCA_WRAPPER_PATH="$ORCA_WRAPPER_DIR/orca"
+mkdir -p "$ORCA_WRAPPER_DIR"
+
+if [ -e "$ORCA_WRAPPER_PATH" ] \
+   && ! grep -Fqx '# Managed by zsh-setup' "$ORCA_WRAPPER_PATH"; then
+    printf 'ERROR: Refusing to overwrite an unmanaged Orca command: %s\n' \
+      "$ORCA_WRAPPER_PATH" >&2
+    exit 1
+fi
+
+install -m 755 "$SCRIPT_DIR/orca.sh" "$ORCA_WRAPPER_PATH"
+xattr -d com.apple.quarantine \
+  "$ORCA_WRAPPER_PATH" 2>/dev/null || true
+
 "$GIT_BIN" config --global core.excludesfile "$HOME/.gitignore_global"
 "$GIT_BIN" config --global push.autoSetupRemote true
 
@@ -242,7 +258,8 @@ printf 'Installed: %s\n' \
   "$HOME/.gitignore_global" \
   "$HOME/.gittag.sh" \
   "$HOME/.gitsync.sh" \
-  "$HOME/.IntelliJOpen.sh"
+  "$HOME/.IntelliJOpen.sh" \
+  "$ORCA_WRAPPER_PATH"
 
 
 # ==================================================

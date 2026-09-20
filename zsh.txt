@@ -12,6 +12,10 @@ elif [[ -x /usr/local/bin/brew ]]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+# Prefer user-installed command wrappers while keeping Homebrew ahead of the
+# system paths.
+path=("$HOME/.local/bin" "${path[@]}")
+
 # Keep PATH unique when plugins such as gcloud prepend existing entries.
 typeset -U path PATH
 
@@ -163,7 +167,6 @@ plugins=(
   docker
   docker-compose
   kubectl
-  pod
 
   # ------------------------------------------------
   # Cloud
@@ -175,15 +178,12 @@ plugins=(
   # Java
   # ------------------------------------------------
   mvn
-  gradle
 
   # ------------------------------------------------
   # Node.js
   # ------------------------------------------------
   node
   npm
-  nvm
-  yarn
 
   # ------------------------------------------------
   # Go
@@ -195,23 +195,11 @@ plugins=(
   # ------------------------------------------------
   python
   pip
-  pyenv
-
-  # ------------------------------------------------
-  # Database
-  # ------------------------------------------------
-  postgres
 
   # ------------------------------------------------
   # IDE / Editor
   # ------------------------------------------------
   vscode
-
-  # ------------------------------------------------
-  # Other
-  # ------------------------------------------------
-  heroku
-  supervisor
 
   # ------------------------------------------------
   # Custom ZSH UX / Completion
@@ -232,6 +220,15 @@ plugins=(
 # ==================================================
 
 source "$ZSH/oh-my-zsh.sh"
+
+
+# ==================================================
+# Key Bindings
+# ==================================================
+
+# Search history entries containing the text already typed at the prompt.
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
 
 
 # ==================================================
@@ -290,18 +287,34 @@ alias idea="$HOME/.IntelliJOpen.sh"
 # Git
 # --------------------------------------------------
 
-# Fetch remote branches and remove local branches whose upstream
-# branch has already been deleted.
+# Fetch every remote and remove local branches whose upstream branch has
+# already been deleted. Branches that have not been merged are kept by -d.
 #
 # The currently checked-out branch will never be removed.
-alias git-prune-local='git fetch -p && current_branch=$(git branch --show-current) && for branch in $(git branch -vv | grep ": gone]" | awk "{print \$1}"); do [ "$branch" != "$current_branch" ] && git branch -d "$branch"; done'
+git-prune-local() {
+  local current_branch branch upstream
+
+  git fetch --all --prune || return
+  current_branch="$(git branch --show-current)" || return
+
+  while IFS=$'\t' read -r branch upstream; do
+    [[ -n "$upstream" && "$branch" != "$current_branch" ]] || continue
+    git show-ref --verify --quiet "$upstream" && continue
+    git branch -d -- "$branch"
+  done < <(
+    git for-each-ref \
+      --format=$'%(refname:short)\t%(upstream)' \
+      refs/heads
+  )
+}
 
 
 # ==================================================
 # Custom Configuration
 # ==================================================
 
-# Add machine-specific configuration below this line.
+# Keep machine-specific configuration in ~/.zshrc.local so rerunning
+# setup.sh does not overwrite it.
 #
 # Examples:
 #
@@ -310,3 +323,7 @@ alias git-prune-local='git fetch -p && current_branch=$(git branch --show-curren
 #
 # alias k="kubectl"
 # alias dc="docker compose"
+
+if [[ -r "$HOME/.zshrc.local" ]]; then
+  source "$HOME/.zshrc.local"
+fi
