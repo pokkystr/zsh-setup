@@ -300,6 +300,32 @@ test_git_prune_local_removes_only_gone_noncurrent_branches() {
     rm -rf "$fixture_root"
 }
 
+test_zsh_template_overrides_existing_git_prune_local_alias() {
+    local fixture_home
+    local output
+    local status
+
+    fixture_home="$(mktemp -d)"
+    prepare_installed_omz_fixture "$fixture_home"
+
+    output="$(
+        HOME="$fixture_home" "$BREW_PREFIX/bin/zsh" -dfc '
+            alias git-prune-local="print -r -- wrong-alias"
+            source "$1" || exit
+            whence -w git-prune-local
+        ' _ "$PROJECT_DIR/zsh.txt" 2>&1
+    )"
+    status=$?
+
+    if [ "$status" -eq 0 ] && [ "$output" = 'git-prune-local: function' ]; then
+        pass "zsh.txt overrides an existing git-prune-local alias"
+    else
+        fail "zsh.txt overrides an existing git-prune-local alias (got $output)"
+    fi
+
+    rm -rf "$fixture_home"
+}
+
 test_zsh_template_omits_unused_plugins() {
     local fixture_home
     local output
@@ -817,6 +843,7 @@ test_zsh_template_prioritizes_homebrew
 test_zsh_template_loads_local_configuration
 test_zsh_template_binds_history_substring_search
 test_git_prune_local_removes_only_gone_noncurrent_branches
+test_zsh_template_overrides_existing_git_prune_local_alias
 test_zsh_template_omits_unused_plugins
 test_orca_wrapper_adds_explicit_directory
 test_orca_wrapper_passes_other_commands_through

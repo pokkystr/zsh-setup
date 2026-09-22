@@ -291,6 +291,7 @@ alias idea="$HOME/.IntelliJOpen.sh"
 # already been deleted. Branches that have not been merged are kept by -d.
 #
 # The currently checked-out branch will never be removed.
+unalias git-prune-local 2>/dev/null || true
 git-prune-local() {
   local current_branch branch upstream
 
