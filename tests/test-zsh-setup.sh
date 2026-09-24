@@ -456,6 +456,9 @@ run_setup_fixture() {
     SSH_FIXTURE_MODE="${SSH_FIXTURE_MODE:-success}" \
     EXPECTED_LOGIN_SHELL="$BREW_PREFIX/bin/zsh" \
     /bin/bash -c '
+        git-igitt() {
+            printf "git-igitt fixture\n"
+        }
         dscl() {
             printf "UserShell: %s\n" "$EXPECTED_LOGIN_SHELL"
         }

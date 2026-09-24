@@ -14,7 +14,7 @@ fi
 
 # Prefer user-installed command wrappers while keeping Homebrew ahead of the
 # system paths.
-path=("$HOME/.local/bin" "${path[@]}")
+path=("$HOME/.local/bin" "${CARGO_HOME:-$HOME/.cargo}/bin" "${path[@]}")
 
 # Keep PATH unique when plugins such as gcloud prepend existing entries.
 typeset -U path PATH
@@ -286,6 +286,8 @@ alias idea="$HOME/.IntelliJOpen.sh"
 # --------------------------------------------------
 # Git
 # --------------------------------------------------
+
+alias git-graph='git-igitt'
 
 # Fetch every remote and remove local branches whose upstream branch has
 # already been deleted. Branches that have not been merged are kept by -d.

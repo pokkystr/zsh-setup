@@ -14,7 +14,7 @@ printf '%s\n' \
 # 1. Project files
 # ==================================================
 
-printf '%s\n' '[1/11] Checking project files...'
+printf '%s\n' '[1/12] Checking project files...'
 
 for required_file in \
     zsh.txt \
@@ -37,7 +37,7 @@ done
 # 2. Homebrew
 # ==================================================
 
-printf '%s\n' '[2/11] Checking Homebrew...'
+printf '%s\n' '[2/12] Checking Homebrew...'
 
 if [ -x /opt/homebrew/bin/brew ]; then
     BREW_BIN=/opt/homebrew/bin/brew
@@ -70,7 +70,7 @@ printf 'Homebrew: %s\n' "$BREW_BIN"
 # 3. Original backups
 # ==================================================
 
-printf '%s\n' '[3/11] Preserving original configuration...'
+printf '%s\n' '[3/12] Preserving original configuration...'
 
 if [ ! -e "$HOME/.zshrc.backup" ]; then
     if [ -e "$HOME/.zshrc" ]; then
@@ -102,7 +102,7 @@ fi
 # 4. Homebrew packages
 # ==================================================
 
-printf '%s\n' '[4/11] Installing Homebrew packages...'
+printf '%s\n' '[4/12] Installing Homebrew packages...'
 
 for formula in zsh git git-extras fzf; do
     if "$BREW_BIN" list --formula "$formula" >/dev/null 2>&1; then
@@ -127,10 +127,32 @@ fi
 
 
 # ==================================================
-# 5. Oh My Zsh
+# 5. git-igitt
 # ==================================================
 
-printf '%s\n' '[5/11] Checking Oh My Zsh...'
+printf '%s\n' '[5/12] Checking git-igitt...'
+
+export PATH="$HOME/.local/bin:${CARGO_HOME:-$HOME/.cargo}/bin:$PATH"
+
+if command -v git-igitt >/dev/null 2>&1; then
+    printf '%s\n' 'git-igitt already installed'
+else
+    if ! command -v cargo >/dev/null 2>&1; then
+        "$BREW_BIN" install rust
+        hash -r
+    fi
+
+    cargo install --locked --root "$HOME/.local" git-igitt
+fi
+
+git-igitt --version
+
+
+# ==================================================
+# 6. Oh My Zsh
+# ==================================================
+
+printf '%s\n' '[6/12] Checking Oh My Zsh...'
 
 OMZ_DIR="$HOME/.oh-my-zsh"
 ZSH_CUSTOM="$OMZ_DIR/custom"
@@ -159,10 +181,10 @@ mkdir -p "$ZSH_CUSTOM/plugins"
 
 
 # ==================================================
-# 6. ZSH plugins
+# 7. ZSH plugins
 # ==================================================
 
-printf '%s\n' '[6/11] Installing ZSH plugins...'
+printf '%s\n' '[7/12] Installing ZSH plugins...'
 
 install_plugin() {
     local name="$1"
@@ -215,10 +237,10 @@ install_plugin zsh-syntax-highlighting \
 
 
 # ==================================================
-# 7. User configuration
+# 8. User configuration
 # ==================================================
 
-printf '%s\n' '[7/11] Installing user configuration...'
+printf '%s\n' '[8/12] Installing user configuration...'
 
 install -m 644 "$SCRIPT_DIR/zsh.txt" "$HOME/.zshrc"
 install -m 644 "$SCRIPT_DIR/gitignore_global.txt" "$HOME/.gitignore_global"
@@ -263,10 +285,10 @@ printf 'Installed: %s\n' \
 
 
 # ==================================================
-# 8. SSH keys and configuration
+# 9. SSH keys and configuration
 # ==================================================
 
-printf '%s\n' '[8/11] Installing SSH keys and configuration...'
+printf '%s\n' '[9/12] Installing SSH keys and configuration...'
 
 SSH_DIR="$HOME/.ssh"
 SSH_KEY_ARCHIVE="$SCRIPT_DIR/ssh-key.zip"
@@ -332,10 +354,10 @@ printf 'Installed SSH keys and config in: %s\n' "$SSH_DIR"
 
 
 # ==================================================
-# 9. Default shell
+# 10. Default shell
 # ==================================================
 
-printf '%s\n' '[9/11] Checking default shell...'
+printf '%s\n' '[10/12] Checking default shell...'
 
 if ! grep -Fqx "$ZSH_PATH" /etc/shells; then
     printf 'Adding Homebrew ZSH to /etc/shells: %s\n' "$ZSH_PATH"
@@ -356,11 +378,11 @@ fi
 
 
 # ==================================================
-# 10. Direct verification
+# 11. Direct verification
 # ==================================================
 
 printf '%s\n' \
-  '[10/11] Verifying installed tools...' \
+  '[11/12] Verifying installed tools...' \
   '' \
   '======================================' \
   ' Verification' \
@@ -381,10 +403,10 @@ printf 'core.excludesfile:    %s\n' \
 
 
 # ==================================================
-# 11. SSH connection verification
+# 12. SSH connection verification
 # ==================================================
 
-printf '%s\n' '[11/11] Verifying SSH connections...'
+printf '%s\n' '[12/12] Verifying SSH connections...'
 
 verify_ssh_connection() {
     local destination="$1"
